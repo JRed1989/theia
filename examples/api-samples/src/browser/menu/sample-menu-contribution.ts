@@ -46,28 +46,29 @@ export class SampleCommandContribution implements CommandContribution {
 @injectable()
 export class SampleMenuContribution implements MenuContribution {
     registerMenus(menus: MenuModelRegistry): void {
-        const subMenuPath = [...MAIN_MENU_BAR, 'sample-menu'];
-        menus.registerSubmenu(subMenuPath, 'Sample Menu', {
+        const submenuPath = [...MAIN_MENU_BAR, 'sample-menu'];
+        menus.registerSubmenu(submenuPath, 'Sample Menu', {
             order: '2' // that should put the menu right next to the File menu
         });
-        menus.registerMenuAction(subMenuPath, {
+        menus.registerMenuAction(submenuPath, {
             commandId: SampleCommand.id,
             order: '0'
         });
-        menus.registerMenuAction(subMenuPath, {
+        menus.registerMenuAction(submenuPath, {
             commandId: SampleCommand2.id,
             order: '2'
         });
-        const subSubMenuPath = [...subMenuPath, 'sample-sub-menu'];
-        menus.registerSubmenu(subSubMenuPath, 'Sample sub menu', { order: '1' });
-        menus.registerMenuAction(subSubMenuPath, {
+        const subSubmenuPath = [...submenuPath, 'sample-submenu'];
+        menus.registerSubmenu(subSubmenuPath, 'Sample submenu', { order: '2' });
+        menus.registerMenuAction(subSubmenuPath, {
             commandId: SampleCommand.id,
-            order: '0'
+            order: '1'
         });
-        menus.registerMenuAction(subSubMenuPath, {
+        menus.registerMenuAction(subSubmenuPath, {
             commandId: SampleCommand2.id,
-            order: '2'
+            order: '3'
         });
+        menus.registerMenuPlaceholder(subSubmenuPath, 'Placeholder', { order: '0' });
     }
 }
 

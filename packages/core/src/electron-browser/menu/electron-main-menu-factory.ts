@@ -20,9 +20,10 @@ import * as electron from 'electron';
 import { inject, injectable } from 'inversify';
 import {
     CommandRegistry, isOSX, ActionMenuNode, CompositeMenuNode,
-    MAIN_MENU_BAR, MenuModelRegistry, MenuPath
+    MAIN_MENU_BAR, MenuModelRegistry, MenuPath, PlaceholderMenuNode
 } from '../../common';
-import { PreferenceService, KeybindingRegistry, Keybinding } from '../../browser';
+import { Keybinding } from '../../common/keybinding';
+import { PreferenceService, KeybindingRegistry } from '../../browser';
 import { ContextKeyService } from '../../browser/context-key-service';
 import debounce = require('lodash.debounce');
 import { ContextMenuContext } from '../../browser/menu/context-menu-context';
@@ -176,6 +177,13 @@ export class ElectronMainMenuFactory {
                 if (this.commandRegistry.getToggledHandler(commandId, ...args)) {
                     this._toggledCommands.add(commandId);
                 }
+            } else if (menu instanceof PlaceholderMenuNode) {
+                items.push({
+                    id: menu.id,
+                    label: menu.label,
+                    enabled: false,
+                    visible: true
+                });
             }
         }
         return items;

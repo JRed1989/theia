@@ -19,7 +19,7 @@ import { MenuBar, Menu as MenuWidget, Widget } from '@phosphor/widgets';
 import { CommandRegistry as PhosphorCommandRegistry } from '@phosphor/commands';
 import {
     CommandRegistry, ActionMenuNode, CompositeMenuNode,
-    MenuModelRegistry, MAIN_MENU_BAR, MenuPath, DisposableCollection, Disposable
+    MenuModelRegistry, MAIN_MENU_BAR, MenuPath, DisposableCollection, Disposable, PlaceholderMenuNode
 } from '../../common';
 import { KeybindingRegistry } from '../keybinding';
 import { FrontendApplicationContribution, FrontendApplication } from '../frontend-application';
@@ -92,10 +92,12 @@ export class BrowserMainMenuFactory {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     protected registerMenu(menuCommandRegistry: MenuCommandRegistry, menu: CompositeMenuNode, args: any[]): void {
         for (const child of menu.children) {
-            if (child instanceof ActionMenuNode) {
-                menuCommandRegistry.registerActionMenu(child, args);
+            if (child instanceof PlaceholderMenuNode) {
+                menuCommandRegistry.registerMenuNode(child, args);
+            } else if (child instanceof ActionMenuNode) {
+                menuCommandRegistry.registerMenuNode(child, args);
                 if (child.altNode) {
-                    menuCommandRegistry.registerActionMenu(child.altNode, args);
+                    menuCommandRegistry.registerMenuNode(child.altNode, args);
                 }
             } else if (child instanceof CompositeMenuNode) {
                 this.registerMenu(menuCommandRegistry, child, args);
@@ -268,6 +270,11 @@ class DynamicMenuWidget extends MenuWidget {
                         items.push(...submenu); // render children
                     }
                 }
+            } else if (item instanceof PlaceholderMenuNode) {
+                items.push({
+                    command: item.id,
+                    type: 'command'
+                });
             } else if (item instanceof ActionMenuNode) {
                 const { context, contextKeyService } = this.services;
                 const node = item.altNode && context.altPressed ? item.altNode : item;
@@ -354,7 +361,7 @@ export class BrowserMenuBarContribution implements FrontendApplicationContributi
 class MenuCommandRegistry extends PhosphorCommandRegistry {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    protected actions = new Map<string, [ActionMenuNode, any[]]>();
+    protected actions = new Map<string, [ActionMenuNode | PlaceholderMenuNode, any[]]>();
     protected toDispose = new DisposableCollection();
 
     constructor(protected services: MenuServices) {
@@ -362,18 +369,26 @@ class MenuCommandRegistry extends PhosphorCommandRegistry {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    registerActionMenu(menu: ActionMenuNode, args: any[]): void {
-        const { commandId } = menu.action;
-        const { commandRegistry } = this.services;
-        const command = commandRegistry.getCommand(commandId);
-        if (!command) {
-            return;
+    registerMenuNode(menu: ActionMenuNode | PlaceholderMenuNode, args: any[]): void {
+        if (menu instanceof PlaceholderMenuNode) {
+            const { id } = menu;
+            if (this.actions.has(id)) {
+                return;
+            }
+            this.actions.set(id, [menu, []]);
+        } else {
+            const { commandId } = menu.action;
+            const { commandRegistry } = this.services;
+            const command = commandRegistry.getCommand(commandId);
+            if (!command) {
+                return;
+            }
+            const { id } = command;
+            if (this.actions.has(id)) {
+                return;
+            }
+            this.actions.set(id, [menu, args]);
         }
-        const { id } = command;
-        if (this.actions.has(id)) {
-            return;
-        }
-        this.actions.set(id, [menu, args]);
     }
 
     snapshot(): this {
@@ -385,43 +400,58 @@ class MenuCommandRegistry extends PhosphorCommandRegistry {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    protected registerCommand(menu: ActionMenuNode, args: any[]): Disposable {
-        const { commandRegistry, keybindingRegistry } = this.services;
-        const command = commandRegistry.getCommand(menu.action.commandId);
-        if (!command) {
-            return Disposable.NULL;
-        }
-        const { id } = command;
-        if (this.hasCommand(id)) {
-            // several menu items can be registered for the same command in different contexts
-            return Disposable.NULL;
-        }
-
-        // We freeze the `isEnabled`, `isVisible`, and `isToggled` states so they won't change.
-        const enabled = commandRegistry.isEnabled(id, ...args);
-        const visible = commandRegistry.isVisible(id, ...args);
-        const toggled = commandRegistry.isToggled(id, ...args);
-        const unregisterCommand = this.addCommand(id, {
-            execute: () => commandRegistry.executeCommand(id, ...args),
-            label: menu.label,
-            icon: menu.icon,
-            isEnabled: () => enabled,
-            isVisible: () => visible,
-            isToggled: () => toggled
-        });
-
-        const bindings = keybindingRegistry.getKeybindingsForCommand(id);
-        // Only consider the first keybinding.
-        if (bindings.length) {
-            const binding = bindings[0];
-            const keys = keybindingRegistry.acceleratorFor(binding);
-            this.addKeyBinding({
-                command: id,
-                keys,
-                selector: '.p-Widget' // We have the PhosphorJS dependency anyway.
+    protected registerCommand(menu: ActionMenuNode | PlaceholderMenuNode, args: any[]): Disposable {
+        if (menu instanceof PlaceholderMenuNode) {
+            const { id } = menu;
+            if (this.hasCommand(id)) {
+                return Disposable.NULL;
+            }
+            const unregisterCommand = this.addCommand(id, {
+                execute: () => { /* NOOP */ },
+                label: menu.label,
+                icon: menu.icon,
+                isEnabled: () => false,
+                isVisible: () => true
             });
+            return Disposable.create(() => unregisterCommand.dispose());
+        } else {
+            const { commandRegistry, keybindingRegistry } = this.services;
+            const command = commandRegistry.getCommand(menu.action.commandId);
+            if (!command) {
+                return Disposable.NULL;
+            }
+            const { id } = command;
+            if (this.hasCommand(id)) {
+                // several menu items can be registered for the same command in different contexts
+                return Disposable.NULL;
+            }
+
+            // We freeze the `isEnabled`, `isVisible`, and `isToggled` states so they won't change.
+            const enabled = commandRegistry.isEnabled(id, ...args);
+            const visible = commandRegistry.isVisible(id, ...args);
+            const toggled = commandRegistry.isToggled(id, ...args);
+            const unregisterCommand = this.addCommand(id, {
+                execute: () => commandRegistry.executeCommand(id, ...args),
+                label: menu.label,
+                icon: menu.icon,
+                isEnabled: () => enabled,
+                isVisible: () => visible,
+                isToggled: () => toggled
+            });
+
+            const bindings = keybindingRegistry.getKeybindingsForCommand(id);
+            // Only consider the first keybinding.
+            if (bindings.length) {
+                const binding = bindings[0];
+                const keys = keybindingRegistry.acceleratorFor(binding);
+                this.addKeyBinding({
+                    command: id,
+                    keys,
+                    selector: '.p-Widget' // We have the PhosphorJS dependency anyway.
+                });
+            }
+            return Disposable.create(() => unregisterCommand.dispose());
         }
-        return Disposable.create(() => unregisterCommand.dispose());
     }
 
 }

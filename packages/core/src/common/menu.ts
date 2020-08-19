@@ -78,15 +78,21 @@ export class MenuModelRegistry {
         }
     }
 
-    registerMenuAction(menuPath: MenuPath, item: MenuAction): Disposable {
-        const parent = this.findGroup(menuPath);
+    registerMenuAction(menuPath: MenuPath, item: MenuAction, options?: SubMenuOptions): Disposable {
+        const parent = this.findGroup(menuPath, options);
         const actionNode = new ActionMenuNode(item, this.commands);
         return parent.addNode(actionNode);
     }
 
+    registerMenuPlaceholder(menuPath: MenuPath, label: string, options?: SubMenuOptions): Disposable {
+        const parent = this.findGroup(menuPath, options);
+        const placeholderNode = new PlaceholderMenuNode(menuPath, label, options);
+        return parent.addNode(placeholderNode);
+    }
+
     registerSubmenu(menuPath: MenuPath, label: string, options?: SubMenuOptions): Disposable {
         if (menuPath.length === 0) {
-            throw new Error('The sub menu path cannot be empty.');
+            throw new Error('The submenu path cannot be empty.');
         }
         const index = menuPath.length - 1;
         const menuId = menuPath[index];
@@ -262,6 +268,29 @@ export class CompositeMenuNode implements MenuNode {
     }
 }
 
+/**
+ * Special menu node that is not backed by any commands and is always disabled.
+ */
+export class PlaceholderMenuNode implements MenuNode {
+
+    private static readonly UUID = 'd365a814-2c2d-4d29-a42c-c6842655785e'; // To avoid command ID collision.
+
+    constructor(protected readonly menuPath: MenuPath, public readonly label: string, protected options?: SubMenuOptions) { }
+
+    get icon(): string | undefined {
+        return this.options?.iconClass;
+    }
+
+    get sortString(): string {
+        return this.options?.order || this.label;
+    }
+
+    get id(): string {
+        return [PlaceholderMenuNode.UUID, ...this.menuPath, this.label].join('-');
+    }
+
+}
+
 export class ActionMenuNode implements MenuNode {
 
     readonly altNode: ActionMenuNode | undefined;
@@ -285,7 +314,7 @@ export class ActionMenuNode implements MenuNode {
         }
         const cmd = this.commands.getCommand(this.action.commandId);
         if (!cmd) {
-            throw new Error(`A command with id '${this.action.commandId}' does not exist.`);
+            throw new Error(`A command with ID '${this.action.commandId}' does not exist.`);
         }
         return cmd.label || cmd.id;
     }
